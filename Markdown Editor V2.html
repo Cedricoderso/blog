@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown Editor</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts - Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Marked.js CDN für Markdown zu HTML Konvertierung -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        /* Grundlegende Markdown-Stile für die Vorschau */
+        .markdown-preview h1 { font-size: 2.25rem; font-weight: 700; margin-bottom: 1rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; }
+        .markdown-preview h2 { font-size: 1.875rem; font-weight: 600; margin-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.25rem; }
+        .markdown-preview h3 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem; }
+        .markdown-preview p { margin-bottom: 1rem; line-height: 1.6; }
+        .markdown-preview ul, .markdown-preview ol { margin-bottom: 1rem; padding-left: 1.5rem; }
+        .markdown-preview ul li { list-style-type: disc; }
+        .markdown-preview ol li { list-style-type: decimal; }
+        .markdown-preview a { color: #3b82f6; text-decoration: underline; }
+        .markdown-preview pre {
+            background-color: #1f2937; /* Grau 800 */
+            color: #f9fafb; /* Grau 50 */
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            margin-bottom: 1rem;
+        }
+        .markdown-preview code {
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+            background-color: #e5e7eb; /* Grau 200 */
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.3rem;
+            font-size: 0.875em;
+        }
+        .markdown-preview pre code {
+            background-color: transparent;
+            padding: 0;
+            border-radius: 0;
+        }
+        .markdown-preview blockquote {
+            border-left: 4px solid #9ca3af; /* Grau 400 */
+            color: #4b5563; /* Grau 600 */
+            padding-left: 1rem;
+            margin-bottom: 1rem;
+            font-style: italic;
+        }
+        .markdown-preview hr {
+            border: none;
+            border-top: 1px solid #d1d5db; /* Grau 300 */
+            margin: 1.5rem 0;
+        }
+        .markdown-preview table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1rem;
+        }
+        .markdown-preview th, .markdown-preview td {
+            border: 1px solid #d1d5db;
+            padding: 0.75rem;
+            text-align: left;
+        }
+        .markdown-preview th {
+            background-color: #f3f4f6;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gray-100 p-4 flex flex-col items-center justify-center">
+
+    <div class="w-full max-w-6xl bg-white rounded-lg shadow-xl p-6">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Markdown Editor</h1>
+
+        <!-- Buttons -->
+        <div class="flex flex-wrap justify-center gap-4 mb-6">
+            <button id="importButton"
+                class="px-6 py-3 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 transition duration-200 ease-in-out transform hover:scale-105">
+                Importieren
+            </button>
+            <input type="file" id="fileInput" accept=".md,.txt" class="hidden">
+
+            <button id="exportButton"
+                class="px-6 py-3 bg-green-600 text-white rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75 transition duration-200 ease-in-out transform hover:scale-105">
+                Exportieren
+            </button>
+        </div>
+
+        <!-- Editor und Vorschau Bereiche -->
+        <div class="flex flex-col md:flex-row gap-6">
+            <!-- Editor Bereich -->
+            <div class="flex-1 flex flex-col">
+                <h2 class="text-xl font-semibold text-gray-700 mb-3">Editor</h2>
+                <textarea id="markdownEditor"
+                    class="flex-1 w-full h-96 md:h-auto p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none font-mono text-sm"
+                    placeholder="Schreibe deinen Markdown-Text hier..."></textarea>
+            </div>
+
+            <!-- Vorschau Bereich -->
+            <div class="flex-1 flex flex-col">
+                <h2 class="text-xl font-semibold text-gray-700 mb-3">Vorschau</h2>
+                <div id="markdownPreview"
+                    class="flex-1 w-full h-96 md:h-auto p-4 border border-gray-300 rounded-lg bg-gray-50 overflow-y-auto markdown-preview">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // DOM-Elemente abrufen
+            const markdownEditor = document.getElementById('markdownEditor');
+            const markdownPreview = document.getElementById('markdownPreview');
+            const importButton = document.getElementById('importButton');
+            const fileInput = document.getElementById('fileInput');
+            const exportButton = document.getElementById('exportButton');
+
+            let debounceTimer;
+
+            // Funktion zum Aktualisieren der Vorschau
+            const updatePreview = () => {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    try {
+                        // Konvertiere Markdown in HTML
+                        const html = marked.parse(markdownEditor.value);
+                        markdownPreview.innerHTML = html;
+                    } catch (error) {
+                        console.error("Fehler beim Parsen von Markdown:", error);
+                        markdownPreview.innerHTML = "<p class='text-red-500'>Fehler beim Rendern des Markdown.</p>";
+                    }
+                }, 300); // 300ms Debounce-Zeit
+            };
+
+            // Initialer Markdown-Text
+            const initialMarkdown = `# Willkommen im Markdown Editor!
+
+Dies ist ein einfacher **Markdown Editor**, mit dem du:
+
+* Markdown schreiben kannst
+* Dateien importieren kannst
+* Deine Arbeit als \`.md\` Datei exportieren kannst
+
+---
+
+## Funktionen:
+
+1.  **Schreiben:** Tippe einfach in das linke Feld.
+2.  **Vorschau:** Sieh dir die gerenderte HTML-Vorschau auf der rechten Seite an.
+3.  **Importieren:** Klicke auf "Importieren", um eine \`.md\` oder \`.txt\` Datei zu laden.
+4.  **Exportieren:** Klicke auf "Exportieren", um deinen Markdown-Text als \`.md\` Datei zu speichern.
+
+\`\`\`javascript
+// Beispiel Code-Block
+function helloWorld() {
+  console.log("Hallo Welt!");
+}
+\`\`\`
+
+> Ein Zitatblock: "Die beste Art, die Zukunft vorauszusagen, ist, sie zu gestalten."
+
+Besuche [Google](https://www.google.com) für weitere Informationen.
+`;
+            markdownEditor.value = initialMarkdown;
+            updatePreview(); // Vorschau beim Laden der Seite initialisieren
+
+            // Event Listener für Änderungen im Editor
+            markdownEditor.addEventListener('input', updatePreview);
+
+            // Event Listener für den Import-Button
+            importButton.addEventListener('click', () => {
+                fileInput.click(); // Verstecktes Dateieingabefeld auslösen
+            });
+
+            // Event Listener für die Dateiauswahl
+            fileInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    importButton.textContent = 'Importiere...'; // Ladeanzeige
+                    importButton.disabled = true;
+
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const content = e.target.result;
+                        markdownEditor.value = content;
+                        updatePreview(); // Vorschau nach dem Import aktualisieren
+                        importButton.textContent = 'Importieren';
+                        importButton.disabled = false;
+                    };
+                    reader.onerror = () => {
+                        console.error("Fehler beim Lesen der Datei.");
+                        // Eine benutzerdefinierte Modalanzeige wäre hier besser als alert()
+                        alert("Fehler beim Laden der Datei.");
+                        importButton.textContent = 'Importieren';
+                        importButton.disabled = false;
+                    };
+                    reader.readAsText(file);
+                }
+            });
+
+            // Event Listener für den Export-Button
+            exportButton.addEventListener('click', () => {
+                try {
+                    const markdownText = markdownEditor.value;
+                    const blob = new Blob([markdownText], { type: 'text/markdown' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'meine-markdown-datei.md'; // Standarddateiname
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url); // Bereinigen der URL
+                } catch (error) {
+                    console.error("Fehler beim Exportieren der Datei:", error);
+                    // Eine benutzerdefinierte Modalanzeige wäre hier besser als alert()
+                    alert("Fehler beim Exportieren der Datei.");
+                }
+            });
+        });
+    </script>
+</body>
+</html>
